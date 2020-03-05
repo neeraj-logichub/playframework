@@ -4,19 +4,14 @@
 
 package play.api.db.evolutions
 
-import java.io.InputStream
-import java.io.File
+import java.io.{File, InputStream}
 import java.net.URI
 import java.sql._
-import javax.inject.Inject
-import javax.inject.Singleton
 
-import play.api.db.DBApi
-import play.api.db.Database
+import javax.inject.{Inject, Singleton}
+import play.api.{Environment, Logger, PlayException}
+import play.api.db.{DBApi, Database}
 import play.api.libs.Collections
-import play.api.Environment
-import play.api.Logger
-import play.api.PlayException
 import play.utils.PlayIO
 
 import scala.annotation.tailrec
@@ -74,7 +69,7 @@ trait EvolutionsApi {
    * @param revision the revision to mark as resolved
    * @param schema The schema where all the play evolution tables are saved in
    */
-  def resolve(db: String, revision: Int, schema: String): Unit
+  def resolve(db: String, revision: BigDecimal, schema: String): Unit
 
   /**
    * Apply pending evolutions for the given database.
@@ -103,7 +98,7 @@ class DefaultEvolutionsApi @Inject()(dbApi: DBApi) extends EvolutionsApi {
   def evolve(db: String, scripts: Seq[Script], autocommit: Boolean, schema: String) =
     databaseEvolutions(db, schema).evolve(scripts, autocommit)
 
-  def resolve(db: String, revision: Int, schema: String) = databaseEvolutions(db, schema).resolve(revision)
+  def resolve(db: String, revision: BigDecimal, schema: String) = databaseEvolutions(db, schema).resolve(revision)
 }
 
 /**
@@ -153,7 +148,7 @@ class DatabaseEvolutions(database: Database, schema: String = "") {
               Some(
                 (
                   rs,
-                  Evolution(rs.getInt(1), Option(rs.getString(3)).getOrElse(""), Option(rs.getString(4)).getOrElse(""))
+                  Evolution(BigDecimal(rs.getBigDecimal(1)), Option(rs.getString(3)).getOrElse(""), Option(rs.getString(4)).getOrElse(""))
                 )
               )
             }
@@ -174,7 +169,7 @@ class DatabaseEvolutions(database: Database, schema: String = "") {
               "(id, hash, applied_at, apply_script, revert_script, state, last_problem) " +
               "values(?, ?, ?, ?, ?, ?, ?)"
           ) { ps =>
-            ps.setInt(1, e.revision)
+            ps.setBigDecimal(1, e.revision.bigDecimal)
             ps.setString(2, e.hash)
             ps.setTimestamp(3, new Timestamp(System.currentTimeMillis()))
             ps.setString(4, e.sql_up)
@@ -198,17 +193,17 @@ class DatabaseEvolutions(database: Database, schema: String = "") {
       }
     }
 
-    def updateLastProblem(message: String, revision: Int)(implicit conn: Connection): Boolean = {
+    def updateLastProblem(message: String, revision: BigDecimal)(implicit conn: Connection): Boolean = {
       prepareAndExecute("update ${schema}play_evolutions set last_problem = ? where id = ?") { ps =>
         ps.setString(1, message)
-        ps.setInt(2, revision)
+        ps.setBigDecimal(2, revision.bigDecimal)
       }
     }
 
     implicit val connection = database.getConnection(autocommit = autocommit)
     checkEvolutionsState()
 
-    var applying           = -1
+    var applying           = BigDecimal.valueOf(-1)
     var lastScript: Script = null
 
     try {
@@ -293,7 +288,7 @@ class DatabaseEvolutions(database: Database, schema: String = "") {
         "select id, hash, apply_script, revert_script, state, last_problem from ${schema}play_evolutions where state like 'applying_%'"
       ) { problem =>
         if (problem.next) {
-          val revision = problem.getInt("id")
+          val revision = problem.getBigDecimal("id")
           val state    = problem.getString("state")
           val hash     = problem.getString("hash").take(7)
           val script = state match {
@@ -322,7 +317,7 @@ class DatabaseEvolutions(database: Database, schema: String = "") {
     appliedEvolutions.map(DownScript)
   }
 
-  def resolve(revision: Int): Unit = {
+  def resolve(revision: BigDecimal): Unit = {
     implicit val connection = database.getConnection(autocommit = true)
     try {
       execute("update ${schema}play_evolutions set state = 'applied' where state = 'applying_up' and id = " + revision)
@@ -369,7 +364,8 @@ class DatabaseEvolutions(database: Database, schema: String = "") {
 
 }
 
-private object DefaultEvolutionsApi {
+private object
+DefaultEvolutionsApi {
 
   val logger = Logger(classOf[DefaultEvolutionsApi])
 
@@ -461,7 +457,7 @@ abstract class ResourceEvolutionsReader extends EvolutionsReader {
    *
    * @return An InputStream to consume the resource, if such a resource exists.
    */
-  def loadResource(db: String, revision: Int): Option[InputStream]
+  def loadResource(db: String, revision: BigDecimal): Option[InputStream]
 
   def evolutions(db: String): Seq[Evolution] = {
 
@@ -485,7 +481,7 @@ abstract class ResourceEvolutionsReader extends EvolutionsReader {
     }
 
     Collections
-      .unfoldLeft(1) { revision =>
+      .unfoldLeft(BigDecimal.valueOf(1)) { revision =>
         loadResource(db, revision).map { stream =>
           (revision + 1, (revision, PlayIO.readStreamAsString(stream)(Codec.UTF8)))
         }
@@ -527,7 +523,7 @@ class EnvironmentEvolutionsReader @Inject()(environment: Environment) extends Re
 
   import DefaultEvolutionsApi._
 
-  def loadResource(db: String, revision: Int): Option[InputStream] = {
+  def loadResource(db: String, revision: BigDecimal): Option[InputStream] = {
     @tailrec def findPaddedRevisionResource(paddedRevision: String, uri: Option[URI]): Option[InputStream] = {
       if (paddedRevision.length > 15) {
         uri.map(u => u.toURL().openStream()) // Revision string has reached max padding
@@ -568,7 +564,7 @@ class ClassLoaderEvolutionsReader(
     classLoader: ClassLoader = classOf[ClassLoaderEvolutionsReader].getClassLoader,
     prefix: String = ""
 ) extends ResourceEvolutionsReader {
-  def loadResource(db: String, revision: Int) = {
+  def loadResource(db: String, revision: BigDecimal) = {
     Option(classLoader.getResourceAsStream(prefix + Evolutions.resourceName(db, revision)))
   }
 }
@@ -626,7 +622,7 @@ object SimpleEvolutionsReader {
  * @param error an inconsistent state error
  * @param rev the revision
  */
-case class InconsistentDatabase(db: String, script: String, error: String, rev: Int, autocommit: Boolean)
+case class InconsistentDatabase(db: String, script: String, error: String, rev: BigDecimal, autocommit: Boolean)
     extends PlayException.RichDescription(
       "Database '" + db + "' is in an inconsistent state!",
       "An evolution has not been applied properly. Please check the problem and resolve it manually" + (if (autocommit)
