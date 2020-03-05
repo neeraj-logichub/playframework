@@ -4,22 +4,15 @@
 
 package play.api.db.evolutions
 
-import java.sql.Statement
-import java.sql.Connection
-import java.sql.SQLException
-import javax.inject.Inject
-import javax.inject.Provider
-import javax.inject.Singleton
+import java.sql.{Connection, SQLException, Statement}
+
+import javax.inject.{Inject, Provider, Singleton}
+import play.api._
+import play.api.db.{DBApi, Database}
+import play.api.db.evolutions.DatabaseUrlPatterns._
+import play.core.{HandleWebCommandSupport, WebCommands}
 
 import scala.util.control.Exception.ignoring
-
-import play.api.db.Database
-import play.api.db.DBApi
-import play.api._
-import play.core.HandleWebCommandSupport
-import play.core.WebCommands
-
-import play.api.db.evolutions.DatabaseUrlPatterns._
 
 /**
  * Run evolutions on application startup. Automatically runs on construction.
@@ -459,7 +452,7 @@ class EvolutionsWebCommands @Inject()(evolutions: EvolutionsApi, reader: Evoluti
 
       case resolveEvolutions(db, rev) => {
         Some {
-          evolutions.resolve(db, rev.toInt, config.forDatasource(db).schema)
+          evolutions.resolve(db, BigDecimal(rev), config.forDatasource(db).schema)
           buildLink.forceReload()
           play.api.mvc.Results.Redirect(redirectUrl)
         }

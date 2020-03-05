@@ -8,16 +8,10 @@ import java.io.File
 import java.nio.charset.Charset
 import java.nio.file._
 
-import play.api.db.DBApi
-import play.api.db.Database
-import play.api.inject.ApplicationLifecycle
-import play.api.inject.DefaultApplicationLifecycle
+import play.api._
+import play.api.db.{DBApi, Database}
+import play.api.inject.{ApplicationLifecycle, DefaultApplicationLifecycle}
 import play.api.libs.Codecs.sha1
-import play.api.Configuration
-import play.api.Environment
-import play.api.Logger
-import play.api.Mode
-import play.api.Play
 import play.core.DefaultWebCommands
 import play.utils.PlayIO
 
@@ -31,7 +25,7 @@ import play.utils.PlayIO
  * @param sql_up the SQL statements for UP application
  * @param sql_down the SQL statements for DOWN application
  */
-case class Evolution(revision: Int, sql_up: String = "", sql_down: String = "") {
+case class Evolution(revision: BigDecimal, sql_up: String = "", sql_down: String = "") {
 
   /**
    * Revision hash, automatically computed from the SQL content.
@@ -107,14 +101,14 @@ object Evolutions {
   /**
    * Default evolution file location.
    */
-  def fileName(db: String, revision: Int): String = s"${directoryName(db)}/${revision}.sql"
+  def fileName(db: String, revision: BigDecimal): String = s"${directoryName(db)}/${revision}.sql"
 
   def fileName(db: String, revision: String): String = s"${directoryName(db)}/${revision}.sql"
 
   /**
    * Default evolution resource name.
    */
-  def resourceName(db: String, revision: Int): String = s"evolutions/${db}/${revision}.sql"
+  def resourceName(db: String, revision: BigDecimal): String = s"evolutions/${db}/${revision}.sql"
 
   def resourceName(db: String, revision: String): String = s"evolutions/${db}/${revision}.sql"
 
@@ -137,7 +131,7 @@ object Evolutions {
    */
   def updateEvolutionScript(
       db: String = "default",
-      revision: Int = 1,
+      revision: BigDecimal = BigDecimal.valueOf(1),
       comment: String = "Generated",
       ups: String,
       downs: String
@@ -331,7 +325,7 @@ object OfflineEvolutions {
       classloader: ClassLoader,
       dbApi: DBApi,
       dbName: String,
-      revision: Int,
+      revision: BigDecimal,
       schema: String = ""
   ): Unit = {
     val evolutions = getEvolutions(appPath, classloader, dbApi)

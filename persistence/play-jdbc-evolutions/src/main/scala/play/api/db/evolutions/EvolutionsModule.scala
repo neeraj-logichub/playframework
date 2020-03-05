@@ -5,11 +5,9 @@
 package play.api.db.evolutions
 
 import javax.inject._
-
+import play.api.{Configuration, Environment}
 import play.api.db.DBApi
 import play.api.inject._
-import play.api.Configuration
-import play.api.Environment
 import play.core.WebCommands
 
 /**
@@ -18,7 +16,7 @@ import play.core.WebCommands
 class EvolutionsModule
     extends SimpleModule(
       bind[EvolutionsConfig].toProvider[DefaultEvolutionsConfigParser],
-      bind[EvolutionsReader].to[EnvironmentEvolutionsReader],
+      bind[EvolutionsReader].to[CustomEvolutionReader],
       bind[EvolutionsApi].to[DefaultEvolutionsApi],
       bind[ApplicationEvolutions].toProvider[ApplicationEvolutionsProvider].eagerly
     )
